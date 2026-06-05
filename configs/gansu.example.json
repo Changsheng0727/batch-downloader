@@ -1,0 +1,12 @@
+{
+  "estimate_csv": "E:/yanjiusheng/gansu_arcgis_ready/gansu_5m_county_estimate.csv",
+  "out_dir": "E:/yanjiusheng/gansu_5m_whole_downloads",
+  "work_dir": "E:/yanjiusheng/gansu_5m_work",
+  "qinghai_reference_dir": "E:/yanjiusheng/qinghai1_5m_downloads",
+  "arcgis_python": "C:/Python27/ArcGIS10.8/python.exe",
+  "resolution": 5.0,
+  "wayback_id": "58924",
+  "workers": 16,
+  "max_tiles_per_chunk": 2000,
+  "order": "largest-first"
+}

@@ -1,0 +1,41 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Large rasters, caches, and ArcGIS outputs
+*.tif
+*.tiff
+*.tfw
+*.prj
+*.ovr
+*.aux.xml
+*.jpg
+*.jpeg
+*.png
+*.gdb/
+tile_cache/
+raw/
+work/
+downloads/
+outputs/
+logs/
+*.log
+
+# GIS boundary/source data
+*.shp
+*.shx
+*.dbf
+*.sbn
+*.sbx
+*.cpg
+*.zip
+
+# Runtime status and local data
+*_download_status.csv
+data/
+configs/*.local.json
