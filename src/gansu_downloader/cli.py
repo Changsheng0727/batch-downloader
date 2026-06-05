@@ -4,21 +4,20 @@ import argparse
 import json
 from pathlib import Path
 
-from .arcgis import DEFAULT_ARCGIS_PYTHON
 from .batch import DownloadOptions, run_batch
-
-
-DEFAULT_ROOT = Path(r"E:\yanjiusheng")
-DEFAULT_ESTIMATE = DEFAULT_ROOT / "gansu_arcgis_ready" / "gansu_5m_county_estimate.csv"
-DEFAULT_OUT_DIR = DEFAULT_ROOT / "gansu_5m_whole_downloads"
-DEFAULT_WORK_DIR = DEFAULT_ROOT / "gansu_5m_work"
-DEFAULT_QINGHAI_REFERENCE_DIR = DEFAULT_ROOT / "qinghai1_5m_downloads"
 
 
 def load_config(path: Path | None) -> dict[str, object]:
     if not path:
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def path_setting(parser: argparse.ArgumentParser, args_value: Path | None, config: dict[str, object], key: str) -> Path:
+    value = args_value or config.get(key)
+    if not value:
+        parser.error(f"Missing required path: --{key.replace('_', '-')} or config field '{key}'")
+    return Path(value)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,15 +41,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
     config = load_config(args.config)
     options = DownloadOptions(
-        estimate_csv=args.estimate_csv or Path(config.get("estimate_csv", DEFAULT_ESTIMATE)),
-        out_dir=args.out_dir or Path(config.get("out_dir", DEFAULT_OUT_DIR)),
-        work_dir=args.work_dir or Path(config.get("work_dir", DEFAULT_WORK_DIR)),
-        qinghai_reference_dir=args.qinghai_reference_dir or Path(config.get("qinghai_reference_dir", DEFAULT_QINGHAI_REFERENCE_DIR)),
-        arcgis_python=args.arcgis_python or Path(config.get("arcgis_python", DEFAULT_ARCGIS_PYTHON)),
-        areas=args.areas or config.get("areas"),
+        estimate_csv=path_setting(parser, args.estimate_csv, config, "estimate_csv"),
+        out_dir=path_setting(parser, args.out_dir, config, "out_dir"),
+        work_dir=path_setting(parser, args.work_dir, config, "work_dir"),
+        qinghai_reference_dir=path_setting(parser, args.qinghai_reference_dir, config, "qinghai_reference_dir"),
+        arcgis_python=path_setting(parser, args.arcgis_python, config, "arcgis_python"),
+        areas=args.areas or str(config.get("areas", "") or ""),
         resolution=args.resolution if args.resolution is not None else float(config.get("resolution", 5.0)),
         wayback_id=args.wayback_id or str(config.get("wayback_id", "58924")),
         workers=args.workers if args.workers is not None else int(config.get("workers", 8)),

@@ -7,9 +7,6 @@ import tempfile
 from pathlib import Path
 
 
-DEFAULT_ARCGIS_PYTHON = Path(r"C:\Python27\ArcGIS10.8\python.exe")
-
-
 def _run_temp_arcgis_script(arcgis_python: Path, source: str, args: list[str], prefix: str) -> None:
     fd, script_path = tempfile.mkstemp(prefix=prefix, suffix=".py")
     os.close(fd)

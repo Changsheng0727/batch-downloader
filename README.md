@@ -38,38 +38,35 @@ gansu-batch-downloader/
 安装依赖：
 
 ```powershell
-cd E:\yanjiusheng\gansu-batch-downloader
-E:\Python312\python.exe -m pip install -r requirements.txt
+cd path\to\gansu-batch-downloader
+python -m pip install -r requirements.txt
 ```
 
 ## 运行
 
+本项目不内置任何固定磁盘路径。运行前必须先复制示例配置，并把所有 `CHANGE_ME` 路径改成你自己机器上的路径，尤其是 `arcgis_python`：
+
+```powershell
+copy configs\gansu.example.json configs\gansu.local.json
+notepad configs\gansu.local.json
+```
+
 查看计划，不下载：
 
 ```powershell
-E:\Python312\python.exe -m gansu_downloader.cli `
-  --estimate-csv E:\yanjiusheng\gansu_arcgis_ready\gansu_5m_county_estimate.csv `
-  --out-dir E:\yanjiusheng\gansu_5m_whole_downloads `
-  --work-dir E:\yanjiusheng\gansu_5m_work `
-  --dry-run
+python -m gansu_downloader.cli --config configs\gansu.local.json --dry-run
 ```
 
 下载全部县区：
 
 ```powershell
-E:\Python312\python.exe -m gansu_downloader.cli `
-  --estimate-csv E:\yanjiusheng\gansu_arcgis_ready\gansu_5m_county_estimate.csv `
-  --out-dir E:\yanjiusheng\gansu_5m_whole_downloads `
-  --work-dir E:\yanjiusheng\gansu_5m_work `
-  --workers 16 `
-  --max-tiles-per-chunk 2000 `
-  --order largest-first
+python -m gansu_downloader.cli --config configs\gansu.local.json
 ```
 
 只补跑指定县区：
 
 ```powershell
-E:\Python312\python.exe -m gansu_downloader.cli --areas 71,1,11,18,45,51,75 --workers 16
+python -m gansu_downloader.cli --config configs\gansu.local.json --areas 71,1,11,18,45,51,75
 ```
 
 ## 输出
@@ -77,7 +74,7 @@ E:\Python312\python.exe -m gansu_downloader.cli --areas 71,1,11,18,45,51,75 --wo
 默认整县成果：
 
 ```text
-E:\yanjiusheng\gansu_5m_whole_downloads/
+path\to\output\gansu_5m_whole_downloads/
   gansu_001_5m_clipped.tif
   gansu_002_5m_clipped.tif
   gansu_download_status.csv
@@ -86,7 +83,7 @@ E:\yanjiusheng\gansu_5m_whole_downloads/
 内部临时目录：
 
 ```text
-E:\yanjiusheng\gansu_5m_work/
+path\to\work\gansu_5m_work/
   raw/
   gansu_001/
   gansu_001_part_0001_clipped.tif
