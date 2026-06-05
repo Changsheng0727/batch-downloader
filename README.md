@@ -1,94 +1,136 @@
-# Gansu Batch Downloader
+# Batch Imagery Downloader
 
-批量下载甘肃县区 Esri Wayback World Imagery 瓦片，拼接成整县 GeoTIFF，并用 ArcGIS 裁剪到县界。
+This project batch-downloads Esri Wayback World Imagery tiles, mosaics them into GeoTIFF rasters, and clips each raster to an administrative boundary with ArcGIS/ArcPy.
 
-## 功能
+The current examples use Gansu Province because that was the first production dataset, but the workflow is not limited to Gansu. You can adapt it to any province, city, county set, or custom region as long as you provide:
 
-- 从估算表 `gansu_5m_county_estimate.csv` 读取县区瓦片范围
-- 支持按县区 ID 选择任务，例如 `--areas 1,11,18` 或 `--areas 1-10`
-- 大县自动拆成内部块下载、裁剪，最后合并成一个整县 GeoTIFF
-- 瓦片并发下载并使用本地缓存
-- 失败后可无 `--redo` 重跑，自动复用已完成的内部裁剪块
-- 输出状态 CSV，便于查看完成/失败县区
-- 依赖 ArcGIS Desktop/ArcPy 做裁剪和多块镶嵌
+- A region estimate CSV with tile ranges
+- Boundary feature classes or shapefiles for clipping
+- An ArcGIS Desktop/ArcPy Python environment
+- Output and work directories
 
-## 目录结构
+## Features
+
+- Read tile ranges from an estimate CSV
+- Select regions by ID, for example `--areas 1,11,18` or `--areas 1-10`
+- Split large regions into internal chunks for download and clipping
+- Reuse completed internal clipped chunks on reruns
+- Merge chunks into one final GeoTIFF per region
+- Download tiles concurrently with a local cache
+- Write a status CSV for completed, skipped, and failed regions
+- Use Gansu Province as an example dataset, while keeping the pipeline reusable for other regions
+
+## Project Structure
 
 ```text
-gansu-batch-downloader/
+batch-downloader/
   src/gansu_downloader/
-    arcgis.py      # ArcGIS/ArcPy 子进程裁剪、镶嵌、PRJ 生成
-    batch.py       # 整县批量下载主流程
-    cli.py         # 命令行入口
-    estimates.py   # 估算 CSV 读取与县区分块
-    status.py      # 状态 CSV
-    tiles.py       # 坐标转换、瓦片下载、拼接
+    arcgis.py      # ArcGIS/ArcPy clipping, mosaic, and PRJ generation
+    batch.py       # Batch download workflow
+    cli.py         # Command-line entry point
+    estimates.py   # Estimate CSV loading and chunk planning
+    status.py      # Status CSV writing
+    tiles.py       # Coordinate conversion, tile download, and mosaic creation
   configs/
     gansu.example.json
   scripts/
     run_gansu_example.ps1
 ```
 
-## 环境
+Note: module and example config names still contain `gansu` because this project was first built from a Gansu dataset. The downloader logic itself is generic.
 
-- Python 3.10+ 用于下载主程序
-- ArcGIS Desktop 10.x 的 Python 2.7，用于 `arcpy`
-- Python 依赖：`requests`、`Pillow`
+## Environment
 
-安装依赖：
+- Python 3.10+ for the main downloader
+- ArcGIS Desktop 10.x Python 2.7, or another ArcPy-capable Python, for clipping and mosaicking
+- Python packages: `requests`, `Pillow`
+
+Install dependencies:
 
 ```powershell
-cd path\to\gansu-batch-downloader
+cd path\to\batch-downloader
 python -m pip install -r requirements.txt
 ```
 
-## 运行
+## Configure Paths
 
-本项目不内置任何固定磁盘路径。运行前必须先复制示例配置，并把所有 `CHANGE_ME` 路径改成你自己机器上的路径，尤其是 `arcgis_python`：
+This project does not include fixed local disk paths. Before running, copy the example config and edit every `CHANGE_ME` value, especially `arcgis_python`.
 
 ```powershell
 copy configs\gansu.example.json configs\gansu.local.json
 notepad configs\gansu.local.json
 ```
 
-查看计划，不下载：
+Example config fields:
+
+```json
+{
+  "estimate_csv": "CHANGE_ME/path/to/region_estimate.csv",
+  "out_dir": "CHANGE_ME/path/to/final_geotiffs",
+  "work_dir": "CHANGE_ME/path/to/work_dir",
+  "reference_dir": "CHANGE_ME/path/to/reference_dir_with_web_mercator_prj",
+  "arcgis_python": "CHANGE_ME/path/to/ArcGIS/python.exe",
+  "resolution": 5.0,
+  "wayback_id": "58924",
+  "workers": 16,
+  "max_tiles_per_chunk": 2000,
+  "order": "largest-first",
+  "status_csv_name": "download_status.csv"
+}
+```
+
+For another province or region, create your own local config with the same fields and point them to your data. `reference_dir` only needs to contain `web_mercator_aux_sphere.prj`; it is not tied to any province.
+
+## Run
+
+Preview the plan without downloading:
 
 ```powershell
 python -m gansu_downloader.cli --config configs\gansu.local.json --dry-run
 ```
 
-下载全部县区：
+Download all configured regions:
 
 ```powershell
 python -m gansu_downloader.cli --config configs\gansu.local.json
 ```
 
-只补跑指定县区：
+Retry or run selected region IDs:
 
 ```powershell
 python -m gansu_downloader.cli --config configs\gansu.local.json --areas 71,1,11,18,45,51,75
 ```
 
-## 输出
+## Output
 
-默认整县成果：
+Final GeoTIFF outputs:
 
 ```text
-path\to\output\gansu_5m_whole_downloads/
-  gansu_001_5m_clipped.tif
-  gansu_002_5m_clipped.tif
-  gansu_download_status.csv
+path\to\final_geotiffs/
+  region_001_5m_clipped.tif
+  region_002_5m_clipped.tif
+  download_status.csv
 ```
 
-内部临时目录：
+Internal work directory:
 
 ```text
-path\to\work\gansu_5m_work/
+path\to\work_dir/
   raw/
-  gansu_001/
-  gansu_001_part_0001_clipped.tif
+  region_001/
+  region_001_part_0001_clipped.tif
 ```
 
-## 注意
+Actual file prefixes depend on the `ascii` field in your estimate CSV.
 
-下载成果、瓦片缓存、ArcGIS 工作库和日志体积都很大，不应提交到 Git。`.gitignore` 已排除这些文件。
+## Notes
+
+Downloaded rasters, tile caches, ArcGIS workspaces, and logs can be very large. Do not commit generated imagery or local data to Git. The repository `.gitignore` excludes common raster, GIS, cache, log, and output files.
+
+## Feedback and Contact
+
+If you run into a problem, please open a GitHub issue. You can also contact me by email:
+
+`2821452633@qq.com`
+
+如果使用过程中遇到问题，欢迎在 GitHub Issues 中提出，也可以通过上面的邮箱联系我。

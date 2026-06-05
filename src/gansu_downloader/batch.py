@@ -17,7 +17,7 @@ class DownloadOptions:
     estimate_csv: Path
     out_dir: Path
     work_dir: Path
-    qinghai_reference_dir: Path
+    reference_dir: Path
     arcgis_python: Path
     areas: str | None = None
     resolution: float = 5.0
@@ -25,6 +25,7 @@ class DownloadOptions:
     workers: int = 8
     max_tiles_per_chunk: int = 2000
     order: str = "largest-first"
+    status_csv_name: str = "download_status.csv"
     redo: bool = False
     keep_parts: bool = False
     dry_run: bool = False
@@ -39,7 +40,7 @@ def log(message: str) -> None:
 def run_batch(options: DownloadOptions) -> dict[str, int]:
     options.out_dir.mkdir(parents=True, exist_ok=True)
     options.work_dir.mkdir(parents=True, exist_ok=True)
-    ensure_web_mercator_prj(options.arcgis_python, options.work_dir, options.qinghai_reference_dir)
+    ensure_web_mercator_prj(options.arcgis_python, options.work_dir, options.reference_dir)
 
     rows = load_estimates(options.estimate_csv, parse_areas(options.areas))
     if options.order == "largest-first":
@@ -47,11 +48,11 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
     else:
         rows.sort(key=lambda row: int(row["id"]))
     if not rows:
-        raise RuntimeError("No counties selected.")
+        raise RuntimeError("No regions selected.")
 
     log(f"Output directory: {options.out_dir}")
     log(f"Work directory: {options.work_dir}")
-    log("Selected counties: " + ",".join(str(row["id"]) for row in rows))
+    log("Selected regions: " + ",".join(str(row["id"]) for row in rows))
     log(f"Max tiles per internal chunk: {options.max_tiles_per_chunk}; workers: {options.workers}")
 
     planned = []
@@ -61,7 +62,7 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
         planned.append((row, chunks))
         total_parts += len(chunks)
         log(
-            "County {0:03d} {1}: {2} tiles -> {3} internal chunk(s)".format(
+            "Region {0:03d} {1}: {2} tiles -> {3} internal chunk(s)".format(
                 int(row["id"]), row.get("county", ""), row["tile_count"], len(chunks)
             )
         )
@@ -70,14 +71,14 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
         log(f"Dry run only. Planned internal chunks: {total_parts}")
         return {"completed": 0, "failed": 0, "planned": len(planned), "parts": total_parts}
 
-    status_csv = options.out_dir / "gansu_download_status.csv"
+    status_csv = options.out_dir / options.status_csv_name
     completed = 0
     failed = 0
     for row, chunks in planned:
         final_name = f"{row['ascii']}_5m_clipped.tif"
         final_tif = options.out_dir / final_name
         if final_tif.exists() and not options.redo:
-            log(f"County {int(row['id']):03d}: already exists, skipped -> {final_tif}")
+            log(f"Region {int(row['id']):03d}: already exists, skipped -> {final_tif}")
             write_manifest_row(status_csv, row, "skipped", final_tif, "already exists")
             completed += 1
             continue
@@ -85,13 +86,13 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
         county_work = options.work_dir / str(row["ascii"])
         clipped_parts: list[Path] = []
         try:
-            log(f"County {int(row['id']):03d} {row.get('county', '')}: start.")
+            log(f"Region {int(row['id']):03d} {row.get('county', '')}: start.")
             for index, chunk in enumerate(chunks, 1):
                 cmin, cmax, rmin, rmax = chunk
                 part_base = f"{row['ascii']}_part_{index:04d}"
                 clipped_part = options.work_dir / f"{part_base}_clipped.tif"
                 if clipped_part.exists() and not options.redo:
-                    log(f"County {int(row['id']):03d} chunk {index}/{len(chunks)}: clipped part exists, reuse.")
+                    log(f"Region {int(row['id']):03d} chunk {index}/{len(chunks)}: clipped part exists, reuse.")
                     clipped_parts.append(clipped_part)
                     continue
 
@@ -102,7 +103,7 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
                     resolution=options.resolution,
                     workers=options.workers,
                     work_dir=options.work_dir,
-                    qinghai_reference_dir=options.qinghai_reference_dir,
+                    reference_dir=options.reference_dir,
                     bbox=bbox,
                     col_min=cmin,
                     col_max=cmax,
@@ -122,12 +123,12 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
                 clipped_parts.append(clipped)
                 delete_raster_family(raw_tif)
                 cleanup_dir(cache_dir)
-                log(f"County {int(row['id']):03d} chunk {index}/{len(chunks)}: done.")
+                log(f"Region {int(row['id']):03d} chunk {index}/{len(chunks)}: done.")
 
             if len(clipped_parts) == 1:
                 copy_raster_family(clipped_parts[0], final_tif)
             else:
-                log(f"County {int(row['id']):03d}: merging {len(clipped_parts)} internal chunk(s) into whole raster.")
+                log(f"Region {int(row['id']):03d}: merging {len(clipped_parts)} internal chunk(s) into whole raster.")
                 mosaic_to_whole(options.arcgis_python, clipped_parts, options.out_dir, final_name)
 
             if not options.keep_parts:
@@ -135,16 +136,16 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
                     delete_raster_family(part)
                 cleanup_dir(county_work)
 
-            log(f"County {int(row['id']):03d}: finished -> {final_tif}")
+            log(f"Region {int(row['id']):03d}: finished -> {final_tif}")
             write_manifest_row(status_csv, row, "done", final_tif, "")
             completed += 1
         except Exception as exc:
             failed += 1
             message = repr(exc)
-            log(f"County {int(row['id']):03d}: FAILED: {message}")
+            log(f"Region {int(row['id']):03d}: FAILED: {message}")
             write_manifest_row(status_csv, row, "failed", final_tif, message)
 
-    log(f"Batch finished. Completed/skipped counties: {completed}; failed counties: {failed}")
+    log(f"Batch finished. Completed/skipped regions: {completed}; failed regions: {failed}")
     if failed:
         raise SystemExit(1)
     return {"completed": completed, "failed": failed, "planned": len(planned), "parts": total_parts}

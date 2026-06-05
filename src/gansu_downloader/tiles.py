@@ -117,7 +117,7 @@ def build_mosaic_chunk(
     resolution: float,
     workers: int,
     work_dir: Path,
-    qinghai_reference_dir: Path,
+    reference_dir: Path,
     bbox: list[float],
     col_min: int,
     col_max: int,
@@ -178,6 +178,6 @@ def build_mosaic_chunk(
     image.save(raw_tif, compression="tiff_lzw")
     prj_source = work_dir / "web_mercator_aux_sphere.prj"
     if not prj_source.exists():
-        prj_source = qinghai_reference_dir / "web_mercator_aux_sphere.prj"
+        prj_source = reference_dir / "web_mercator_aux_sphere.prj"
     write_world_files(raw_tif, left, top, pixel_size, prj_source)
     return raw_tif

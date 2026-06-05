@@ -20,12 +20,12 @@ def _run_temp_arcgis_script(arcgis_python: Path, source: str, args: list[str], p
             pass
 
 
-def ensure_web_mercator_prj(arcgis_python: Path, work_dir: Path, qinghai_reference_dir: Path) -> None:
+def ensure_web_mercator_prj(arcgis_python: Path, work_dir: Path, reference_dir: Path) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     target = work_dir / "web_mercator_aux_sphere.prj"
     if target.exists():
         return
-    source = qinghai_reference_dir / "web_mercator_aux_sphere.prj"
+    source = reference_dir / "web_mercator_aux_sphere.prj"
     if source.exists():
         shutil.copy2(source, target)
         return
@@ -38,7 +38,7 @@ path = sys.argv[1]
 with open(path, "w") as handle:
     handle.write(arcpy.SpatialReference(3857).exportToString())
 '''
-    _run_temp_arcgis_script(arcgis_python, script, [str(target)], "gansu_write_prj_")
+    _run_temp_arcgis_script(arcgis_python, script, [str(target)], "region_write_prj_")
 
 
 def clip_with_arcgis(arcgis_python: Path, out_dir: Path, raw_tif: Path, output_base: str, clip_feature: str) -> Path:
@@ -74,7 +74,7 @@ print(out_tif)
         arcgis_python,
         script,
         [str(out_dir), str(raw_tif), output_base, clip_feature],
-        "gansu_arcgis_clip_",
+        "region_arcgis_clip_",
     )
     return out_dir / f"{output_base}_clipped.tif"
 
@@ -117,5 +117,5 @@ print(out_tif)
         arcgis_python,
         script,
         [str(out_dir), out_name, *(str(part) for part in parts)],
-        "gansu_mosaic_whole_",
+        "region_mosaic_whole_",
     )
