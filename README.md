@@ -1,5 +1,7 @@
 # Batch Imagery Downloader
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 This project batch-downloads Esri Wayback World Imagery tiles, mosaics them into GeoTIFF rasters, and clips each raster to an administrative boundary with ArcGIS/ArcPy.
 
 The current examples use Gansu Province because that was the first production dataset, but the workflow is not limited to Gansu. You can adapt it to any province, city, county set, or custom region as long as you provide:
@@ -132,5 +134,3 @@ Downloaded rasters, tile caches, ArcGIS workspaces, and logs can be very large. 
 If you run into a problem, please open a GitHub issue. You can also contact me by email:
 
 `2821452633@qq.com`
-
-如果使用过程中遇到问题，欢迎在 GitHub Issues 中提出，也可以通过上面的邮箱联系我。
