@@ -6,13 +6,16 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .files import move_raster_family
 
-def _run_temp_arcgis_script(arcgis_python: Path, source: str, args: list[str], prefix: str) -> None:
+
+def _run_temp_arcgis_script(arcgis_python: Path, source: str, args: list[str], prefix: str) -> str:
     fd, script_path = tempfile.mkstemp(prefix=prefix, suffix=".py")
     os.close(fd)
     try:
         Path(script_path).write_text(source, encoding="utf-8")
-        subprocess.check_call([str(arcgis_python), script_path, *args])
+        output = subprocess.check_output([str(arcgis_python), script_path, *args])
+        return output.decode("utf-8", "replace").strip()
     finally:
         try:
             os.remove(script_path)
@@ -53,6 +56,9 @@ web_mercator = arcpy.SpatialReference(3857)
 
 arcpy.env.overwriteOutput = True
 arcpy.env.parallelProcessingFactor = "0"
+arcpy.env.compression = "LZW"
+arcpy.env.pyramid = "NONE"
+arcpy.env.rasterStatistics = "NONE"
 arcpy.DefineProjection_management(raw_tif, web_mercator)
 
 out_tif = os.path.join(out_dir, output_base + "_clipped.tif")
@@ -79,7 +85,7 @@ print(out_tif)
     return out_dir / f"{output_base}_clipped.tif"
 
 
-def mosaic_to_whole(arcgis_python: Path, parts: list[Path], out_dir: Path, out_name: str) -> None:
+def mosaic_to_whole(arcgis_python: Path, parts: list[Path], out_dir: Path, out_name: str) -> Path:
     script = r'''
 from __future__ import print_function
 import os
@@ -89,7 +95,8 @@ import arcpy
 out_dir = sys.argv[1]
 out_name = sys.argv[2]
 parts = sys.argv[3:]
-out_tif = os.path.join(out_dir, out_name)
+temp_name = out_name.rsplit(".", 1)[0] + "_building.tif"
+out_tif = os.path.join(out_dir, temp_name)
 
 arcpy.env.overwriteOutput = True
 arcpy.env.compression = "LZW"
@@ -113,9 +120,13 @@ arcpy.MosaicToNewRaster_management(
 )
 print(out_tif)
 '''
-    _run_temp_arcgis_script(
+    output = _run_temp_arcgis_script(
         arcgis_python,
         script,
         [str(out_dir), out_name, *(str(part) for part in parts)],
         "region_mosaic_whole_",
     )
+    temp_tif = Path(output.splitlines()[-1])
+    final_tif = out_dir / out_name
+    move_raster_family(temp_tif, final_tif)
+    return final_tif

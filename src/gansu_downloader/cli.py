@@ -67,7 +67,7 @@ def main() -> None:
         areas=args.areas or str(config.get("areas", "") or ""),
         resolution=args.resolution if args.resolution is not None else float(config.get("resolution", 5.0)),
         wayback_id=args.wayback_id or str(config.get("wayback_id", "58924")),
-        workers=args.workers if args.workers is not None else int(config.get("workers", 8)),
+        workers=args.workers if args.workers is not None else int(config.get("workers", 12)),
         max_tiles_per_chunk=(
             args.max_tiles_per_chunk
             if args.max_tiles_per_chunk is not None

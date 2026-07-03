@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
+from requests.adapters import HTTPAdapter
 from PIL import Image
 
 
@@ -17,6 +19,9 @@ WAYBACK_SERVICE = (
 ORIGIN_SHIFT = 20037508.342789244
 INITIAL_RESOLUTION = 156543.03392804097
 TILE_SIZE = 256
+SESSION_POOL_SIZE = 32
+
+_thread_local = threading.local()
 
 
 def target_zoom(resolution_m: float) -> int:
@@ -72,6 +77,44 @@ def write_world_files(tif_path: Path, left: float, top: float, pixel_size: float
     tif_path.with_suffix(".prj").write_text(prj_source.read_text(), encoding="utf-8")
 
 
+def create_http_session() -> requests.Session:
+    session = requests.Session()
+    adapter = HTTPAdapter(
+        pool_connections=SESSION_POOL_SIZE,
+        pool_maxsize=SESSION_POOL_SIZE,
+        max_retries=0,
+    )
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.headers.update(
+        {
+            "Connection": "keep-alive",
+            "User-Agent": "Mozilla/5.0 Batch Downloader",
+        }
+    )
+    return session
+
+
+def get_thread_session() -> requests.Session:
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = create_http_session()
+        _thread_local.session = session
+    return session
+
+
+def clear_thread_session(session: requests.Session | None = None) -> None:
+    current = getattr(_thread_local, "session", None)
+    if session is None or current is session:
+        if current is not None:
+            try:
+                current.close()
+            except Exception:
+                pass
+        if hasattr(_thread_local, "session"):
+            delattr(_thread_local, "session")
+
+
 def download_tile(
     session: requests.Session | None,
     wayback_id: str,
@@ -87,12 +130,15 @@ def download_tile(
         return tile_path
 
     url = f"{WAYBACK_SERVICE}/tile/{wayback_id}/{zoom}/{row}/{col}"
-    getter = session.get if session is not None else requests.get
     last_error: Exception | None = None
+    active_session = session
     for attempt in range(1, retries + 1):
         tmp_path = tile_path.with_name(f"{tile_path.name}.part.{os.getpid()}.{attempt}")
+        response = None
         try:
-            response = getter(url, timeout=60)
+            if active_session is None:
+                active_session = get_thread_session()
+            response = active_session.get(url, timeout=(10, 60))
             response.raise_for_status()
             if not response.headers.get("content-type", "").lower().startswith("image/"):
                 raise RuntimeError(f"Tile request did not return an image: {url}")
@@ -101,6 +147,15 @@ def download_tile(
             return tile_path
         except Exception as exc:
             last_error = exc
+            if active_session is not None:
+                if session is None:
+                    clear_thread_session(active_session)
+                else:
+                    try:
+                        active_session.close()
+                    except Exception:
+                        pass
+                active_session = None
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
@@ -108,17 +163,19 @@ def download_tile(
                 pass
             if attempt < retries:
                 time.sleep(min(20, attempt * 2))
+        finally:
+            if response is not None:
+                response.close()
     raise last_error  # type: ignore[misc]
 
 
 def build_mosaic_chunk(
     *,
     wayback_id: str,
-    resolution: float,
     workers: int,
     work_dir: Path,
     reference_dir: Path,
-    bbox: list[float],
+    zoom: int,
     col_min: int,
     col_max: int,
     row_min: int,
@@ -127,7 +184,6 @@ def build_mosaic_chunk(
     cache_dir: Path,
     log,
 ) -> Path:
-    zoom = target_zoom(resolution)
     cache_dir.mkdir(parents=True, exist_ok=True)
     cols = col_max - col_min + 1
     rows = row_max - row_min + 1
@@ -150,10 +206,10 @@ def build_mosaic_chunk(
     started = time.time()
     worker_count = max(1, int(workers))
     if worker_count == 1:
-        session = requests.Session()
         for row, col in jobs:
-            tile_path = download_tile(session, wayback_id, zoom, row, col, cache_dir)
-            tile = Image.open(tile_path).convert("RGB")
+            tile_path = download_tile(None, wayback_id, zoom, row, col, cache_dir)
+            with Image.open(tile_path) as tile_handle:
+                tile = tile_handle.convert("RGB")
             image.paste(tile, ((col - col_min) * TILE_SIZE, (row - row_min) * TILE_SIZE))
             completed += 1
             if completed == tile_count or completed % max(1, min(100, tile_count)) == 0:
@@ -168,7 +224,8 @@ def build_mosaic_chunk(
             for future in as_completed(futures):
                 row, col = futures[future]
                 tile_path = future.result()
-                tile = Image.open(tile_path).convert("RGB")
+                with Image.open(tile_path) as tile_handle:
+                    tile = tile_handle.convert("RGB")
                 image.paste(tile, ((col - col_min) * TILE_SIZE, (row - row_min) * TILE_SIZE))
                 completed += 1
                 if completed == tile_count or completed % max(1, min(100, tile_count)) == 0:

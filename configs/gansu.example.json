@@ -6,8 +6,11 @@
   "arcgis_python": "CHANGE_ME/path/to/ArcGIS/python.exe",
   "resolution": 5.0,
   "wayback_id": "58924",
-  "workers": 16,
+  "workers": 12,
   "max_tiles_per_chunk": 2000,
   "order": "largest-first",
-  "status_csv_name": "download_status.csv"
+  "status_csv_name": "download_status.csv",
+  "redo": false,
+  "keep_parts": false,
+  "dry_run": false
 }

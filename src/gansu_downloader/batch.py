@@ -9,7 +9,7 @@ from .arcgis import clip_with_arcgis, ensure_web_mercator_prj, mosaic_to_whole
 from .estimates import load_estimates, parse_areas, split_area
 from .files import cleanup_dir, copy_raster_family, delete_raster_family
 from .status import write_manifest_row
-from .tiles import build_mosaic_chunk, target_zoom, tile_chunk_bbox
+from .tiles import build_mosaic_chunk, target_zoom
 
 
 @dataclass
@@ -22,7 +22,7 @@ class DownloadOptions:
     areas: str | None = None
     resolution: float = 5.0
     wayback_id: str = "58924"
-    workers: int = 8
+    workers: int = 12
     max_tiles_per_chunk: int = 2000
     order: str = "largest-first"
     status_csv_name: str = "download_status.csv"
@@ -41,6 +41,7 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
     options.out_dir.mkdir(parents=True, exist_ok=True)
     options.work_dir.mkdir(parents=True, exist_ok=True)
     ensure_web_mercator_prj(options.arcgis_python, options.work_dir, options.reference_dir)
+    zoom = target_zoom(options.resolution)
 
     rows = load_estimates(options.estimate_csv, parse_areas(options.areas))
     if options.order == "largest-first":
@@ -53,6 +54,7 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
     log(f"Output directory: {options.out_dir}")
     log(f"Work directory: {options.work_dir}")
     log("Selected regions: " + ",".join(str(row["id"]) for row in rows))
+    log(f"Target resolution: {options.resolution} m/px -> Esri tile zoom {zoom}")
     log(f"Max tiles per internal chunk: {options.max_tiles_per_chunk}; workers: {options.workers}")
 
     planned = []
@@ -96,15 +98,13 @@ def run_batch(options: DownloadOptions) -> dict[str, int]:
                     clipped_parts.append(clipped_part)
                     continue
 
-                bbox = tile_chunk_bbox(cmin, cmax, rmin, rmax, target_zoom(options.resolution))
                 cache_dir = county_work / "tile_cache" / f"part_{index:04d}"
                 raw_tif = build_mosaic_chunk(
                     wayback_id=options.wayback_id,
-                    resolution=options.resolution,
                     workers=options.workers,
                     work_dir=options.work_dir,
                     reference_dir=options.reference_dir,
-                    bbox=bbox,
+                    zoom=zoom,
                     col_min=cmin,
                     col_max=cmax,
                     row_min=rmin,
