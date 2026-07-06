@@ -115,6 +115,10 @@ def clear_thread_session(session: requests.Session | None = None) -> None:
             delattr(_thread_local, "session")
 
 
+def tile_cache_path(cache_dir: Path, wayback_id: str, zoom: int, row: int, col: int) -> Path:
+    return cache_dir / f"r{row:05d}" / f"{wayback_id}_z{zoom}_r{row}_c{col}.jpg"
+
+
 def download_tile(
     session: requests.Session | None,
     wayback_id: str,
@@ -125,14 +129,17 @@ def download_tile(
     retries: int = 5,
 ) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
-    tile_path = cache_dir / f"{wayback_id}_z{zoom}_r{row}_c{col}.jpg"
-    if tile_path.is_file() and tile_path.stat().st_size > 0:
-        return tile_path
+    tile_path = tile_cache_path(cache_dir, wayback_id, zoom, row, col)
+    legacy_tile_path = cache_dir / f"{wayback_id}_z{zoom}_r{row}_c{col}.jpg"
+    for candidate in [tile_path, legacy_tile_path]:
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate
 
     url = f"{WAYBACK_SERVICE}/tile/{wayback_id}/{zoom}/{row}/{col}"
     last_error: Exception | None = None
     active_session = session
     for attempt in range(1, retries + 1):
+        tile_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = tile_path.with_name(f"{tile_path.name}.part.{os.getpid()}.{attempt}")
         response = None
         try:
@@ -174,7 +181,7 @@ def build_mosaic_chunk(
     wayback_id: str,
     workers: int,
     work_dir: Path,
-    reference_dir: Path,
+    reference_dir: Path | None,
     zoom: int,
     col_min: int,
     col_max: int,
@@ -234,7 +241,7 @@ def build_mosaic_chunk(
 
     image.save(raw_tif, compression="tiff_lzw")
     prj_source = work_dir / "web_mercator_aux_sphere.prj"
-    if not prj_source.exists():
+    if not prj_source.exists() and reference_dir is not None:
         prj_source = reference_dir / "web_mercator_aux_sphere.prj"
     write_world_files(raw_tif, left, top, pixel_size, prj_source)
     return raw_tif

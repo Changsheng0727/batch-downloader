@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 from pathlib import Path
 
 
@@ -35,6 +36,13 @@ def load_estimates(path: Path, selected: set[int] | None = None) -> list[dict[st
             row["id"] = area_id
             rows.append(row)
     return rows
+
+
+def sanitize_output_stem(area_id: int, preferred: object | None) -> str:
+    text = str(preferred or "").strip()
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Za-z0-9_-]+", "_", text).strip("_")
+    return text or f"region_{area_id:03d}"
 
 
 def split_area(row: dict[str, object], max_tiles: int) -> list[tuple[int, int, int, int]]:
